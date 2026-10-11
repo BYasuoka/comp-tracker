@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Comp Tracker</title><link rel="stylesheet" href="/style.css"><script defer src="/app.js"></script></head>
+<body>
+<aside><div class="brand"><span class="brand-icon">ct</span><div>Comp Tracker<small>YOUR WORK. ACCOUNTED FOR.</small></div></div><nav aria-label="Main navigation"></nav><div class="sidebar-foot"><span class="dot"></span> Local workspace<small>Your data stays on this PC</small></div></aside>
+<main><header><div><div class="eyebrow">PERSONAL COMPENSATION WORKSPACE</div><h1 id="title">Overview</h1><p id="subtitle">A clear picture of your hours, claims and payments.</p></div><button id="refresh" class="primary">↻ Import timesheets</button></header>
+<section id="filters" class="filters" hidden><label>Project<select id="projectFilter"><option value="">All projects</option></select></label><label>From<input id="fromFilter" type="date"></label><label>Through<input id="toFilter" type="date"></label><button id="clearFilters" class="quiet">Clear filters</button><span id="sync" class="muted"></span></section>
+<div id="notice" role="status" hidden></div><div id="content"><section class="panel login"><div class="eyebrow">WELCOME HOME</div><h2>Open your workspace</h2><p>Enter the access key saved in <code>comp-tracker/data/access-key.txt</code>. This protects your records when using a local IP address.</p><form id="login"><label>Access key<input name="key" type="password" required autocomplete="current-password"></label><button class="primary">Open tracker</button></form></section></div>
+<footer>Comp Tracker · First version <span>Reported claims and actual receipts are tracked separately.</span></footer></main>
+<dialog id="modal"><div id="modalBody"></div><button id="closeModal" class="quiet">Cancel / close</button></dialog>
+</body></html>
