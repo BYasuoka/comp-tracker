@@ -30,6 +30,8 @@ Do not put your data repository under GitHub Pages. Do not put your actual recor
 
 **Projects** holds dated rates per full project code. **Calculator** takes explicitly approved eligible hours or days and records confirmed compensation as manual claims. It does not infer overtime eligibility or customer policy. Keep amounts already present in imported claims from being entered twice.
 
+**Overtime** estimates hours using a provisional 40-hour weekly requirement. Work and travel count as worked hours; PTO and holiday row credits help meet the requirement. Once 40 credited hours are reached, worked hours above 8 per day count as daily OT, with additional weekly OT above 40 after removing daily OT. Leave credits do not themselves become OT. Explicit sick-leave entries require review. Only selected workbook versions count. Date filters use week ending, and all projects are combined before calculation. This view does not create payment claims, apply pay multipliers, or infer banked holidays.
+
 **Claims** tracks per diem, other employee reimbursements and compensation separately. Assign ambiguous records to a project. **Payments** supports partial receipts and allocations across several claims/projects, with void history. Company-paid costs and comp-time hours are informational and do not inflate cash owed.
 
 **Timesheets** shows weekly entries, source-cell references, company-paid expenses and import notes. Exclude drafts from totals. **Review** lists missing project assignments, conflicts and unconfigured rules.
