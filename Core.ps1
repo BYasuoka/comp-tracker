@@ -240,6 +240,24 @@ function Apply-Change($db,[string]$action,$body) {
             $db.selections=@($db.selections | Where-Object id -ne $body.id)+@([pscustomobject]@{id=$body.id;hash=$body.hash})
             foreach ($w in $db.weeks | Where-Object id -eq $body.id) { $w.active=($w.hash -eq $body.hash) }
         }
+        'otClaim' {
+            $month=[string]$body.workMonth
+            if ($month -notmatch '^\d{4}-\d{2}$') { throw 'Invalid work month.' }
+            $first=Valid-Date ($month+'-01'); $project=Project-Code $body.project
+            if ($project -eq 'UNASSIGNED' -or !@($db.projects | Where-Object code -eq $project).Count) { throw 'Select an existing project.' }
+            if (@($db.manualClaims | Where-Object { !$_.void -and $_.otMonth -eq $month -and $_.project -eq $project }).Count) { throw 'An OT claim already exists for this project and month. Review or void it before replacing it.' }
+            if (!@($body.rows).Count) { throw 'No calculated OT to claim.' }
+            $rows=@(); $total=0
+            foreach ($r in $body.rows) {
+                $date=Valid-Date $r.date; $hours=Number $r.hours; $rate=Number $r.rate; $pay=Number $r.pay
+                if (!$date.StartsWith($month+'-') -or $r.project -ne $project -or $r.kind -notin @('onsite','travel') -or $null -eq $hours -or $hours -le 0 -or $null -eq $rate -or $rate -lt 0 -or $null -eq $pay -or $pay -lt 0) { throw 'Invalid OT claim detail.' }
+                if ([Math]::Abs([Math]::Round($hours*$rate*0.5,2,[MidpointRounding]::AwayFromZero)-$pay) -gt 0.001) { throw 'OT calculation does not match its rate.' }
+                $rows+= [pscustomobject]@{date=$date;project=$project;kind=$r.kind;hours=$hours;rate=$rate;pay=$pay}; $total+=$pay
+            }
+            if ($total -le 0 -or $total -gt 10000000) { throw 'Claim amount must be positive.' }
+            $start=[DateTime]::ParseExact($first,'yyyy-MM-dd',$script:Invariant);$last=$start.AddMonths(1).AddDays(-1);$expected=$start.AddMonths(4).ToString('yyyy-MM')
+            $db.manualClaims=@($db.manualClaims)+@([pscustomobject]@{id=[guid]::NewGuid().ToString();date=$last.ToString('yyyy-MM-dd');week=$last.AddDays(6-[int]$last.DayOfWeek).ToString('yyyy-MM-dd');project=$project;category='Project compensation';description="OT worked $month; expected payment $expected. Confirmed calculated subtotal; unresolved entries excluded.";amount=[Math]::Round($total,2);source='Monthly OT claim';origin='Manual';unit='USD';void=$false;otMonth=$month;expectedMonth=$expected;otRows=$rows})
+        }
         'claim' {
             $date=Valid-Date $body.date; $amount=Number $body.amount
             if ($null -eq $amount -or [Math]::Round($amount,2) -le 0 -or $amount -gt 10000000) { throw 'Claim amount must be positive.' }
