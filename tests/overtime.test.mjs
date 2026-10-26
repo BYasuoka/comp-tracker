@@ -2,42 +2,47 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
+import {emptyStore,mutate} from '../github/model.mjs';
 const source=readFileSync(new URL('../web/app.js',import.meta.url),'utf8');
 new vm.Script(source);
-const context=vm.createContext({});
-vm.runInContext(source.slice(source.indexOf('function overtimeWeek('),source.indexOf('function overtimeView(')),context);
-const calc=(hours,extra=[])=>context.overtimeWeek({entries:[...hours.map((hours,i)=>({hours,date:`day${i}`,description:'Work',activity:'TTO'})),...extra]});
-test('40-hour gate and daily overtime',()=>{
- assert.equal(calc([10,8,8,8]).total,0);
- assert.equal(calc([10,8,8,8,6]).total,2);
- assert.equal(calc([8,8,8,8,8]).total,0);
+const ctx=vm.createContext({});
+vm.runInContext(source.slice(source.indexOf('function overtimeWeek('),source.indexOf('function overtimeView(')),ctx);
+const rule={effective:'2026-01-01',billableOnsite:100,billableTravel:60};
+const projects=[{code:'P1',rules:[rule]},{code:'P2',rules:[{...rule,billableOnsite:120}]}];
+const entry=(day,hours,activity='C',project='P1',start=8/24)=>({id:day+activity+project,date:'2026-10-'+String(18+day).padStart(2,'0'),hours,activity,project,start});
+const calc=entries=>ctx.overtimeWeek({entries},projects,[]);
+const example=[entry(0,5,'TTO'),...Array.from({length:5},(_,i)=>entry(i+1,10)),entry(6,5,'TFROM')];
+test('user example: 15 onsite and 5 travel OT hours at half billable rates',()=>{
+ const o=calc(example);assert.equal(o.rows.filter(r=>r.kind==='onsite').reduce((s,r)=>s+r.hours,0),15);assert.equal(o.rows.filter(r=>r.kind==='travel').reduce((s,r)=>s+r.hours,0),5);assert.equal(o.rows.reduce((s,r)=>s+r.pay,0),900);assert.equal(o.rows[0].date,'2026-10-22');assert.equal(o.rows[0].hours,5);
 });
-test('daily and weekly overtime do not overlap',()=>{
- const o=calc([10,10,10,10,10]);assert.equal(o.daily,10);assert.equal(o.weekly,0);assert.equal(o.total,10);
- const six=calc([10,10,10,10,10,8]);assert.equal(six.daily,10);assert.equal(six.weekly,8);assert.equal(six.total,18);
- assert.equal(calc([8,8,8,8,8,8]).total,8);
+test('no daily OT; 40 across projects, then correct project rate',()=>{
+ assert.equal(calc([entry(0,10),entry(1,10),entry(2,10),entry(3,10)]).rows.length,0);
+ const o=calc([entry(0,10),entry(1,10),entry(2,10),entry(3,10),entry(4,5,'C','P2')]);assert.equal(o.rows[0].pay,300);
 });
-test('PTO and holiday credit count toward 40 without daily OT',()=>{
- const pto={hours:8,date:'day4',rawProject:'Vacation'};
- assert.equal(calc([10,8,8,8],[pto]).total,2);
- assert.equal(calc([8,8,8,8],[{...pto,rawProject:'Holiday'}]).total,0);
- assert.equal(calc([],[{...pto,hours:48}]).total,0);
- assert.equal(calc([8,8,8,8],[{...pto,description:'Vacation / Sick / Holiday',rawProject:''}]).credit,8);
+test('travel and paid leave count toward threshold but leave does not earn OT',()=>{
+ const o=calc([entry(0,8),entry(1,8),entry(2,8),entry(3,8),{...entry(4,8),rawProject:'Holiday'},entry(5,5,'TFROM'),{...entry(6,8),rawProject:'Vacation'}]);assert.equal(o.rows.length,1);assert.equal(o.rows[0].pay,150);
 });
-test('same-day work across projects combines before daily threshold',()=>{
- assert.equal(calc([6,8,8,8,8],[{hours:4,date:'day0',rawProject:'P123-01',activity:'TFROM'}]).total,2);
+test('dated billable rates and assignment; legacy rates never substituted',()=>{
+ const entries=[entry(0,24),entry(1,16),entry(2,2)];
+ assert.equal(ctx.overtimeWeek({entries},[{code:'P1',rules:[{effective:'2026-01-01',onsite:999}]}],[]).rows[0].pay,null);
+ const p=[{code:'P1',rules:[rule,{...rule,effective:'2026-10-20',billableOnsite:200}]}];assert.equal(ctx.overtimeWeek({entries},p,[]).rows[0].pay,200);
+ assert.equal(ctx.overtimeWeek({entries},projects,[{id:entries[2].id,project:'P2'}]).rows[0].pay,120);
 });
-test('uncertain sick leave and invalid durations require review',()=>{
- assert.equal(calc([8,8,8,8],[{hours:8,date:'day4',rawProject:'Sick'}]).total,null);
- assert.equal(calc([25,8,8]).total,null);
- assert.equal(calc([-1,8,8]).total,null);
+test('mixed threshold day uses start times; missing order requires review',()=>{
+ const entries=[entry(0,20),entry(1,15),entry(2,5,'TTO','P1',6/24),entry(2,5,'C','P2',11/24)];
+ assert.equal(calc(entries).rows[0].pay,300);entries[2].start=null;assert.equal(calc(entries).rows[0].pay,null);
 });
-test('OT view excludes superseded weeks and filters complete weeks by ending date',()=>{
- const week=(hash,week,active)=>({hash,week,active,entries:[{hours:10,date:'a'},{hours:10,date:'b'},{hours:10,date:'c'},{hours:10,date:'d'}]});
- Object.assign(context,{db:{weeks:[week('selected','2026-09-19',true),week('old','2026-09-19',false),week('outside','2026-09-26',true)]},filter:{from:'2026-09-19',to:'2026-09-19',project:'P999'},num:String,esc:String,card:(a,b)=>a+':'+b,panel:(a,b)=>a+b,table:(a,b)=>b});
- vm.runInContext(source.slice(source.indexOf('function overtimeView('),source.indexOf('function workbookStatus(')),context);
- const html=context.overtimeView();
- assert.match(html,/Estimated OT:8 h/);
- assert.match(html,/data-week="selected"/);
- assert.doesNotMatch(html,/data-week="old"|data-week="outside"/);
+test('unknown activity and missing rates never show zero pay',()=>{
+ const entries=[entry(0,20),entry(1,20),entry(2,5,'M')];assert.equal(calc(entries).rows[0].pay,null);
+ entries[2].activity='C';entries[2].project='P3';assert.equal(calc(entries).rows[0].pay,null);
+});
+test('billable rate fields persist and legacy rates are retained',()=>{
+ const db=mutate(emptyStore(),'project',{code:'P100-01',description:'Example',rule:{effective:'2026-01-01',mode:'weekly40',onsite:55,billableOnsite:120,billableTravel:80}});
+ assert.equal(db.projects[0].rules[0].billableOnsite,120);assert.equal(db.projects[0].rules[0].onsite,55);
+ assert.throws(()=>mutate(db,'project',{code:'P100-01',rule:{effective:'2026-01-01',mode:'weekly40',billableOnsite:-1}}));
+});
+test('project filter applies after weekly allocation and excludes superseded workbooks',()=>{
+ Object.assign(ctx,{db:{weeks:[{hash:'active',week:'2026-10-24',active:true,entries:example},{hash:'old',week:'2026-10-24',active:false,entries:example}],projects,assignments:[]},filter:{from:'2026-10-24',to:'2026-10-24',project:'P1'},num:String,esc:String,money:n=>'$'+n,sum:(a,k)=>a.reduce((s,x)=>s+x[k],0),panel:(a,b)=>a+b,card:(a,b)=>a+':'+b,table:(a,b)=>a.join(' ')+b});
+ vm.runInContext(source.slice(source.indexOf('function overtimeView('),source.indexOf('function workbookStatus(')),ctx);
+ const html=ctx.overtimeView();assert.match(html,/Combined OT pay:\$900/);assert.doesNotMatch(html,/data-week="old"/);assert.match(html,/Billable rate/);
 });

@@ -221,8 +221,8 @@ function Apply-Change($db,[string]$action,$body) {
             if ($body.rule) {
                 $date=Valid-Date $body.rule.effective
                 if ($body.rule.mode -notin @('manual','daily8','weekly40','all')) { throw 'Unsupported compensation rule.' }
-                $rule=[pscustomobject]@{id=[guid]::NewGuid().ToString();effective=$date;mode=$body.rule.mode;perDiem=$null;travel=$null;onsite=$null;notes=[string]$body.rule.notes}
-                foreach ($field in @('perDiem','travel','onsite')) {
+                $rule=[pscustomobject]@{id=[guid]::NewGuid().ToString();effective=$date;mode=$body.rule.mode;perDiem=$null;travel=$null;onsite=$null;billableOnsite=$null;billableTravel=$null;notes=[string]$body.rule.notes}
+                foreach ($field in @('perDiem','travel','onsite','billableOnsite','billableTravel')) {
                     if ([string]$body.rule.$field -ne '') { $n=Number $body.rule.$field; if ($null -eq $n -or $n -lt 0 -or $n -gt 100000) { throw 'Rates must be non-negative numbers.' }; $rule.$field=$n }
                 }
                 $p[0].rules=@($p[0].rules)+@($rule)
