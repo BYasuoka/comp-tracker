@@ -46,3 +46,15 @@ test('project filter applies after weekly allocation and excludes superseded wor
  vm.runInContext(source.slice(source.indexOf('function overtimeView('),source.indexOf('function workbookStatus(')),ctx);
  const html=ctx.overtimeView();assert.match(html,/Combined OT pay:\$900/);assert.doesNotMatch(html,/data-week="old"/);assert.match(html,/Billable rate/);
 });
+test('General hours at week end fill initial 40 before project work',()=>{
+ const general={...entry(6,1,'-','UNASSIGNED'),description:'General',start:null};
+ const o=calc([entry(0,10),entry(1,10),entry(2,10),entry(3,10),general]);
+ assert.equal(o.general,1);assert.equal(o.credited,41);assert.equal(o.rows.length,1);assert.equal(o.rows[0].hours,1);assert.equal(o.rows[0].kind,'onsite');assert.equal(o.rows[0].pay,50);
+ assert.equal(calc([entry(0,10),entry(1,10),entry(2,10),entry(3,9),general]).rows.length,0);
+});
+test('General credit shifts OT to project travel and never earns its own OT',()=>{
+ const general={...entry(6,0.5,'-','UNASSIGNED'),description:' General '};
+ const o=calc([entry(0,20),entry(1,18),entry(2,6,'TFROM'),general]);
+ assert.equal(o.rows[0].hours,4.5);assert.equal(o.rows[0].pay,135);
+ assert.equal(calc([{...general,hours:41}]).rows.length,0);
+});
