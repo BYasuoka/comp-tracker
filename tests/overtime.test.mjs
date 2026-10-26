@@ -58,3 +58,14 @@ test('General credit shifts OT to project travel and never earns its own OT',()=
  assert.equal(o.rows[0].hours,4.5);assert.equal(o.rows[0].pay,135);
  assert.equal(calc([{...general,hours:41}]).rows.length,0);
 });
+test('summary cards retain known pay and show caution only for incomplete totals',()=>{
+ vm.runInContext(source.slice(source.indexOf('function card('),source.indexOf('function panel(')),ctx);
+ const entries=example.map(e=>({...e}));entries[6].project='P3';entries.push(entry(6,1,'TFROM','P1',14/24));
+ ctx.db={weeks:[{hash:'active',week:'2026-10-24',active:true,entries}],projects,assignments:[]};ctx.filter={};
+ const html=ctx.overtimeView(),cards=html.slice(html.indexOf('<div class="cards">'),html.indexOf('OT by project'));
+ assert.match(cards,/Travel OT pay<\/div><div class="value">\$30/);
+ assert.match(cards,/Combined OT pay<\/div><div class="value">\$780/);
+ assert.equal((cards.match(/class="card-warning"/g)||[]).length,2);
+ assert.match(cards,/1 pending entry excluded/);
+ entries[6].project='P1';const complete=ctx.overtimeView();assert.doesNotMatch(complete,/class="card-warning"/);
+});
